@@ -140,10 +140,10 @@
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
     <None Include="cape_hill_2k.hdr">
       <Filter>Assets\Textures</Filter>
     </None>
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="cape_hill_2k.dds">
