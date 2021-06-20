@@ -3,6 +3,7 @@
 Texture2D skybox : register(t0);
 SamplerState skyboxSampler : register(s0);
 
+// Deprecated
 [shader("miss")]
 void Miss(inout HitInfo payload : SV_RayPayload)
 {

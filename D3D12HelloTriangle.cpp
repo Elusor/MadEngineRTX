@@ -347,7 +347,7 @@ void D3D12HelloTriangle::OnUpdate()
 	// first triangle to animate its position
 	m_time++;
 	m_instances[0].second =
-		XMMatrixScaling(0.5f, 0.5f, 0.5f) *
+		XMMatrixScaling(0, 0, 0) *
 		XMMatrixRotationAxis({ 0.0f, 1.0f, 0.0f }, static_cast<float>(m_time) / 50.0f) *
 		XMMatrixTranslation(0.0f, 0.1f * cosf(m_time / 20.0f), 0.0f);
 
@@ -752,7 +752,7 @@ void D3D12HelloTriangle::CreateAccelerationStructures()
 		{bottomLevelBuffers.pResult, XMMatrixScaling(0.5f, 0.5f, 0.5f) * XMMatrixRotationAxis(XMVECTOR{0.0f, 1.0f, 0.0f}, XMConvertToRadians(-45.0f)) * XMMatrixTranslation( 2.0f, 0.0f, -2.0f)},*/
 		// for some reason adding another entry to m_instances causes crash in the next UpdateCameraBuffer() call (line containing m_cameraBuffer->Map)
 		// #DXR Extra: Per-Instance Data
-		{planeBottomLevelBuffers.pResult, XMMatrixScaling(1000.0f, 1000.0f, 1000.0f) * XMMatrixTranslation(0.0f, -0.8f, 0.0f)}
+		{planeBottomLevelBuffers.pResult, XMMatrixScaling(0.0f, 0.0f, 0.0f) * XMMatrixTranslation(0.0f, -0.8f, 0.0f)}
 	};
 	CreateTopLevelAS(m_instances);
 
@@ -1505,7 +1505,7 @@ void D3D12HelloTriangle::CreateSkyboxTextureBuffer()
 
 	upload.Begin(D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-	ThrowIfFailed(CreateWICTextureFromFile(m_device.Get(), upload, L"cape_hill.jpg", &m_skyboxTextureBuffer, false));
+	ThrowIfFailed(CreateWICTextureFromFile(m_device.Get(), upload, L"starmap_16k.jpg", &m_skyboxTextureBuffer, false));
 
 	auto uploadResourcesFinished = upload.End(m_commandQueue.Get());
 
