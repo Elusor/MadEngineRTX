@@ -4,27 +4,22 @@ Texture2D skybox : register(t0);
 SamplerState skyboxSampler : register(s0);
 //  Black hole generation shader
 
-float CalculateUpperIntegrationLimit(float M, float b)
+// Rotates a ray around a given axis
+float3 BendRay(float3 rayDir, float3 rayOrigin, float3 holePosition, float angle)
 {
-    float b2 = b * b;
-    float b3 = b2 * b;
-    float b4 = b3 * b;
-    float M2 = M * M;
-    float M4 = M2 * M2;
+    float3 originToHoleDir = normalize(holePosition - rayOrigin);
+    float3 rotationAxis = normalize(cross(rayDir, originToHoleDir));
+    float3 perpendicularAxis = normalize(cross(rotationAxis, rayDir));
+    // Using simplified Rodrigues rotation formula where v and k are perpendicular
+    float cosTh = cos(angle);
+    float sinTh = sin(angle);
     
-    float weirdRoot = pow(-b3 + 54.0f * b * M2 + 6.0f * b * M * sqrt(-3.0f * b2 + 81.0f * M2), 1.0f / 3.0f);
+    float3 rotatedDir =
+        rayDir * cosTh +
+        perpendicularAxis * sinTh;
+        // + (1.f - cosTh) * dot(rotationAxis, rayDir) * rotationAxis;
     
-    float eps = 0.0f;
-    return (-b + (b2 / weirdRoot) + weirdRoot) / (6.0f * M) - eps;
-}
-
-// Calculate the integrated function
-float CalculatePhiDerivativeValue(float w, float M, float b)
-{
-    float mbFactor = 2.0f * M / b;
-    float denominator = (1.0f - w * w * (1 - w * mbFactor));
-    float sqrtDenom = sqrt(denominator);
-    return (1.0f / sqrtDenom);
+    return rotatedDir;
 }
 
 float CalculateB(float3 rayDir, float3 rayOrigin, float3 holePosition)
@@ -36,99 +31,121 @@ float CalculateB(float3 rayDir, float3 rayOrigin, float3 holePosition)
     return b;
 }
 
-// Integrate bend angle derivative to determine total bend
-float CalculateRayBendAngle(float w0, float wMax, float M, float b, float intervalCount)
+// Calculate the denominator of integrated function
+float DenomFun(float w, float M, float b)
 {
-    // Simple numerical integration using trapezoidal rule
-    float curKnot = w0;
-    float totalFunctionValue = CalculatePhiDerivativeValue(curKnot, M, b);    
+    float w2 = w * w;
+    float w3 = w2 * w;    
+    return w2 * ((2.0f * M / b) * w - 1) + 1.0f;
+}
+
+// Calculate the integrated function
+float IntegrationFun(float w, float M, float b)
+{
+    float denominator = DenomFun(w, M, b);
+    return pow(denominator, -0.5);
+}
+
+float FindRoot(float M, float b)
+{   
+    float eps = 0.000001f;
     
-    float knotIncrement = (wMax - w0) / intervalCount;
-    curKnot += knotIncrement;
+    int it = 0;
+    int maxIt = 500;
+    
+    float l = 0;
+    float r = b / (6 * M);
+    float mid = (l + r) / 2.f;            
+    
+    while (abs(r - l) > eps && it < maxIt)
+    {
+        float lVal = DenomFun(l, M, b);
+        float rVal = DenomFun(r, M, b);
+        float midVal = DenomFun(mid, M, b);
+        
+        if (midVal == 0)
+            return mid;
+        
+        if(lVal * midVal < 0)
+        {
+            //l = l;
+            //lVal = lVal;
+            r = mid;       
+            rVal = midVal;            
+        }
+        else
+        {
+            l = mid;
+            lVal = midVal;
+            //r = r;                    
+            //rVal = rVal;
+        }
+        
+        mid = (l + r) / 2.f;
+        midVal = DenomFun(mid, M, b);
+        it++;
+    }
+       
+    return l;
+}
+
+// Integrate bend angle derivative to determine total bend
+float IntegrateBendAngle(float x0, float xn, float M, float b, float intervalCount)
+{           
+    // Simple numerical integration using trapezoidal rule
+    float curKnot = x0;
+    float sum = IntegrationFun(curKnot, M, b);
+    
+    float h = (xn - x0) / intervalCount;
+    curKnot += h;
     
     for (int interval = 1; interval < intervalCount; interval++)
     {
-        totalFunctionValue += 2.0f * CalculatePhiDerivativeValue(curKnot, M, b);
-        curKnot += knotIncrement;
+        sum += 2.0f * IntegrationFun(curKnot, M, b);
+        curKnot += h;
     }
     
     // Skipped due to integral not being defined at wMax
-    //totalFunctionValue += CalculatePhiDerivativeValue(wMax, M, b);
+    // sum += IntegrationFun(xn, M, b);
     
     // Integration result
-    totalFunctionValue *= (knotIncrement / 2.0f);
-    
-    // Formula adjustment deltaPhi = 2 * integral
-    float endValue = 2.0f * totalFunctionValue - PI;        
-    return endValue;
+    sum *= (h / 2.0f);
+
+    return sum;    
 }
 
-// Rotates a ray around a given axis
-float3 BendRay(float3 rayDir, float3 rayOrigin, float3 holePosition, float angle)
-{       
-    float3 originToHoleDir = normalize(holePosition - rayOrigin);
-    float3 rotationAxis = cross(rayDir, originToHoleDir);
-   
-    // Using simplified Rodrigues rotation formula where v and k are perpendicular
-    float cosTh = cos(angle);
-    float sinTh = sin(angle);
-    
-    float3 rotatedDir =
-        rayDir * cosTh +
-        cross(rotationAxis, rayDir) * sinTh;
-        // + (1.f - cosTh) * dot(rotationAxis, rayDir) * rotationAxis;
-    
-    return rotatedDir;
-}
 
 [shader("miss")]
 void ReflectionMiss(inout ReflectionHitInfo hit : SV_RayPayload)
 {   
     // TODO: adjust
-    int integrationIntervalCount = 1000;     
+    int integrationIntervalCount = 50;
     // TODO: Fix mass
-    float M = 1; 
+    float M = 100;
        
     float3 rayDir = normalize(WorldRayDirection());    
     float3 rayOrigin = WorldRayOrigin();
-    float3 blackHolePos = float3(0, 0, 0);
+    float3 blackHolePos = float3(0, 0, 0); 
      
     // 1. Calculate b factor
     float b = CalculateB(rayDir, rayOrigin, blackHolePos);    
-    float w0 = 0;
-    // TODO: check if valid
-    float w1 = CalculateUpperIntegrationLimit(M, b);
     
-    // 2. Calculate bend angle based on current parameters        
-    // TODO: check if valid
-    float bendAngle = CalculateRayBendAngle(w0, w1, M, b, integrationIntervalCount);            
-    // TODO: replace approximation with real value
-    // TODO: check if valid
-    float3 bentRay = BendRay(rayDir, rayOrigin, blackHolePos, 4*M/b);
-    
-    float3 texCol;    
-    if(b*b < 27.f*M)
+    float3 texCol;
+    if (b < sqrt(27.0f) * M) 
     {
-        texCol = float3(0.0f, 0.0f, 0.0f); 
-    }
-    else
-    {        
-        texCol = skybox.SampleLevel(skyboxSampler, DirectionToSpherical(bentRay), 0).rgb;
-    }
-    
-    float3 col;
-    bool debugRender = false;
-    if(debugRender)
-    {                
-        float3 debugCol = float3(b, 0, 0);
-        col = lerp(texCol, debugCol, 0.5);
+        // Black hole light orbit
+        texCol = float3(0.0f, 0.0f, 0.0f);        
     }
     else
     {
-        col = texCol;
-    }    
-            
-    hit.colorAndDistance = float4(col, -1.0f);
+        float w0 = 0;
+        float w1 = FindRoot(M, b);
+        float bendAngle = 2.0f * IntegrateBendAngle(w0, w1, M, b, integrationIntervalCount) - PI;          
+        float3 bentRay = BendRay(rayDir, rayOrigin, blackHolePos, bendAngle);
+        texCol = skybox.SampleLevel(skyboxSampler, DirectionToSpherical(bentRay), 0).rgb;        
+    }           
+    
+    hit.colorAndDistance = float4(texCol, -1.0f);
     hit.normalAndIsHit = float4(0.0f, 0.0f, 0.0f, 0.0f);
     hit.rayEnergy = float4(0.0f, 0.0f, 0.0f, 0.0f);
 }
