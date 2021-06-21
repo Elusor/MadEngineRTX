@@ -1505,7 +1505,7 @@ void D3D12HelloTriangle::CreateSkyboxTextureBuffer()
 
 	upload.Begin(D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-	ThrowIfFailed(CreateWICTextureFromFile(m_device.Get(), upload, L"starmap_16k.jpg", &m_skyboxTextureBuffer, false));
+	ThrowIfFailed(CreateWICTextureFromFile(m_device.Get(), upload, L"starmap_16k_col.jpg", &m_skyboxTextureBuffer, false));
 
 	auto uploadResourcesFinished = upload.End(m_commandQueue.Get());
 

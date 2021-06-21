@@ -29,10 +29,10 @@ float CalculatePhiDerivativeValue(float w, float M, float b)
 
 float CalculateB(float3 rayDir, float3 rayOrigin, float3 holePosition)
 {
-    float3 originToHole = holePosition - rayOrigin;    
+    float3 originToHole = holePosition - rayOrigin;
     float3 othRayDirComponent = dot(originToHole, rayDir) * rayDir;
     float3 bDirection = originToHole - othRayDirComponent;
-    float b = length(bDirection);    
+    float b = length(bDirection);
     return b;
 }
 
@@ -53,13 +53,13 @@ float CalculateRayBendAngle(float w0, float wMax, float M, float b, float interv
     }
     
     // Skipped due to integral not being defined at wMax
-    totalFunctionValue += CalculatePhiDerivativeValue(wMax, M, b);
+    //totalFunctionValue += CalculatePhiDerivativeValue(wMax, M, b);
     
     // Integration result
     totalFunctionValue *= (knotIncrement / 2.0f);
     
     // Formula adjustment deltaPhi = 2 * integral
-    float endValue = 2.0f * totalFunctionValue - PI;
+    float endValue = 2.0f * totalFunctionValue - PI;        
     return endValue;
 }
 
@@ -69,22 +69,26 @@ float3 BendRay(float3 rayDir, float3 rayOrigin, float3 holePosition, float angle
     float3 originToHoleDir = normalize(holePosition - rayOrigin);
     float3 rotationAxis = cross(rayDir, originToHoleDir);
    
-    // Using Rodrigues rotation formula
+    // Using simplified Rodrigues rotation formula where v and k are perpendicular
     float cosTh = cos(angle);
-    float rotatedDir = 
+    float sinTh = sin(angle);
+    
+    float3 rotatedDir =
         rayDir * cosTh +
-        cross(rotationAxis, rayDir) * sin(angle) + 
-        (1.f - cosTh) * dot(rotationAxis, rayDir) * rotationAxis;
-        
+        cross(rotationAxis, rayDir) * sinTh;
+        // + (1.f - cosTh) * dot(rotationAxis, rayDir) * rotationAxis;
+    
     return rotatedDir;
 }
 
 [shader("miss")]
 void ReflectionMiss(inout ReflectionHitInfo hit : SV_RayPayload)
 {   
-    int integrationIntervalCount = 1000; 
-    float M = 5; // 600 solar masses
-        
+    // TODO: adjust
+    int integrationIntervalCount = 1000;     
+    // TODO: Fix mass
+    float M = 1; 
+       
     float3 rayDir = normalize(WorldRayDirection());    
     float3 rayOrigin = WorldRayOrigin();
     float3 blackHolePos = float3(0, 0, 0);
@@ -92,56 +96,38 @@ void ReflectionMiss(inout ReflectionHitInfo hit : SV_RayPayload)
     // 1. Calculate b factor
     float b = CalculateB(rayDir, rayOrigin, blackHolePos);    
     float w0 = 0;
+    // TODO: check if valid
     float w1 = CalculateUpperIntegrationLimit(M, b);
     
     // 2. Calculate bend angle based on current parameters        
-    float bendAngle = CalculateRayBendAngle(w0, w1, M, b, integrationIntervalCount);    
-    // 3a. If Bend is not finite - return black
-
-
-    // 3b. If bend is finite - bend ray           
-    float3 bentRay = BendRay(rayDir, rayOrigin, blackHolePos, -bendAngle);
+    // TODO: check if valid
+    float bendAngle = CalculateRayBendAngle(w0, w1, M, b, integrationIntervalCount);            
+    // TODO: replace approximation with real value
+    // TODO: check if valid
+    float3 bentRay = BendRay(rayDir, rayOrigin, blackHolePos, 4*M/b);
     
-    float3 texCol;
-    if ((bendAngle) < PI)
+    float3 texCol;    
+    if(b*b < 27.f*M)
     {
-        texCol = float3(0.0f, 0.0f, 1.0f);
+        texCol = float3(0.0f, 0.0f, 0.0f); 
     }
-    
-    
-    if ((bendAngle) < PI / 2)
-    {
-        texCol = float3(0.0f, 1.0f, 0.0f);
-    }
-    
-    if ((bendAngle) < 0)
-    {
-        texCol = float3(1.0f, 0.0f, 0.0f);
-    }
-    
-    //if ((bendAngle) > PI)
-    //{
-    //    texCol = float3(1.0f, 1.0f, 0.0f);
-    //}
-    
     else
-    {
-        texCol = skybox.SampleLevel(skyboxSampler, DirectionToSpherical(rayDir), 0).rgb;
+    {        
+        texCol = skybox.SampleLevel(skyboxSampler, DirectionToSpherical(bentRay), 0).rgb;
     }
     
     float3 col;
-    
-    bool debugRender = false;    
+    bool debugRender = false;
     if(debugRender)
     {                
         float3 debugCol = float3(b, 0, 0);
-        col = lerp(texCol, debugCol, 1);
+        col = lerp(texCol, debugCol, 0.5);
     }
     else
     {
         col = texCol;
     }    
-    
+            
     hit.colorAndDistance = float4(col, -1.0f);
     hit.normalAndIsHit = float4(0.0f, 0.0f, 0.0f, 0.0f);
     hit.rayEnergy = float4(0.0f, 0.0f, 0.0f, 0.0f);
